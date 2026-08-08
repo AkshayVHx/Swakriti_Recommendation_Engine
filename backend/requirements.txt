@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+pydantic
+pandas
+sentence-transformers
+fastembed
+qdrant-client
+python-dotenv
+google-generativeai
+google-genai

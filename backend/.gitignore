@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Virtual environment
+venv/
+.env
+.env.*
+
+# Local runtime / data
+qdrant_data/
+*.sqlite3
+*.db
+
+# Logs
+*.log
+
+# IDE
+.vscode/
