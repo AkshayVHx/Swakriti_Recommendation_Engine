@@ -12,11 +12,14 @@ from qdrant_client.models import (
 )
 
 from erp.erp_fetch import fetch_products_from_erp, fetch_single_product
+from erp.excel_fetch import fetch_products_from_excel, fetch_single_product_excel
 
 from nlp.tag_extractor import extract_tags
 from nlp.rule_engine import rank_products
 from scoring.budget import normalize_budget
 from nlp.taxonomy import COLOR_FAMILIES
+
+DATA_SOURCE = os.environ.get("DATA_SOURCE", "excel")
 
 COLLECTION = "skus"
 
@@ -53,55 +56,80 @@ def sku_to_point_id(sku):
     return int(hashlib.md5(str(sku).encode("utf-8")).hexdigest()[:12], 16)
 
 
-def _build_embedding_text(product: dict) -> str:
+def _fallback_dense_text(product: dict) -> str:
     occasion_tags = product.get("occasion_tags") or []
-    style_tags = product.get("style") or []
     body_type_fit = product.get("body_type_fit") or []
     skin_tone_match = product.get("skin_tone_match") or []
     age_group_fit = product.get("age_tags") or []
     color_family = product.get("color_family") or []
-
     return " ".join(filter(None, [
         product.get("name"),
         product.get("item_group"),
         product.get("brand"),
         product.get("gender"),
-        ", ".join(occasion_tags),
-        ", ".join(style_tags),
+        product.get("sub_category"),
+        product.get("collection_name"),
+        product.get("style_category"),
+        product.get("silhouette"),
+        product.get("fit_type"),
         product.get("fabric_category"),
         product.get("specific_color"),
-        product.get("color_tone"),
+        product.get("pattern"),
+        ", ".join(occasion_tags),
         ", ".join(body_type_fit),
         ", ".join(skin_tone_match),
         ", ".join(age_group_fit),
-        ", ".join(color_family),
+        ", ".join([str(v) for v in color_family if v]),
     ]))
+
+
+def _fallback_sparse_text(product: dict) -> str:
+    return " ".join(filter(None, [
+        product.get("embedding_text_sparse"),
+        product.get("style_category"),
+        product.get("silhouette"),
+        product.get("fit_type"),
+        product.get("fabric_category"),
+        product.get("specific_color"),
+        product.get("pattern"),
+        product.get("occasion_primary"),
+        ", ".join(product.get("occasion_tags") or []),
+        ", ".join(product.get("body_type_fit") or []),
+        ", ".join(product.get("skin_tone_match") or []),
+    ])).strip()
+
+
+def _dense_text(product: dict) -> str:
+    return product.get("embedding_text_dense") or _fallback_dense_text(product)
+
+
+def _sparse_text(product: dict) -> str:
+    return product.get("embedding_text_sparse") or _fallback_sparse_text(product)
 
 
 def update_single_product(item_code: str):
     """
-    Incremental update: fetch ONE product from ERPNext, re-embed it,
-    and upsert just that point into Qdrant. Used by the webhook handler
-    so we never rebuild the whole index for one change.
+    Incremental update: fetch ONE product from the configured source,
+    re-embed it, and upsert just that point into Qdrant.
     """
-    product = fetch_single_product(item_code)
+    product = fetch_single_product_excel(item_code) if DATA_SOURCE == "excel" else fetch_single_product(item_code)
     if not product:
-        print(f"[update_single_product] Item {item_code} not found in ERPNext.")
+        print(f"[update_single_product] Item {item_code} not found in the configured source.")
         return False
 
     sizes_str = ", ".join(product.get("available_sizes", []))
     occasion_tags = product.get("occasion_tags", []) or []
-    style_tags = product.get("style", []) or []
     body_type_fit = product.get("body_type_fit", []) or []
     skin_tone_match = product.get("skin_tone_match", []) or []
     age_group_fit = product.get("age_tags", []) or []
     color_family = product.get("color_family") or []
-
-    embedding_text = _build_embedding_text(product)
+    silhouette = product.get("silhouette")
+    dense_text = _dense_text(product)
+    sparse_text = _sparse_text(product)
 
     with _model_lock:
-        dense_vec = dense_model.encode(embedding_text, normalize_embeddings=True).tolist()
-        sparse_vec = list(sparse_model.embed([embedding_text]))[0]
+        dense_vec = dense_model.encode(dense_text, normalize_embeddings=True).tolist()
+        sparse_vec = list(sparse_model.embed([sparse_text]))[0]
 
     point = PointStruct(
         id=sku_to_point_id(product["sku_id"]),
@@ -114,30 +142,70 @@ def update_single_product(item_code: str):
         },
         payload={
             "sku_id": product.get("sku_id"),
+            "sku_codes": product.get("sku_codes", []),
             "product_name": product.get("name"),
             "category": str(product.get("item_group", "")).strip().lower(),
+            "sub_category": product.get("sub_category"),
+            "collection_name": product.get("collection_name"),
             "gender": str(product.get("gender", "")).strip().lower(),
             "brand": product.get("brand"),
             "price": float(product.get("price", 0)),
+            "budget_tier": product.get("budget_tier"),
             "sizes": [s.strip().upper() for s in sizes_str.split(",") if s.strip()],
             "in_stock": product.get("stock_count", 0) > 0,
-            "is_active": not product.get("disabled", 0),
+            "is_active": True,
             "is_new_arrival": product.get("is_new_arrival", False),
             "stock_count": product.get("stock_count", 0),
 
             "specific_color": product.get("specific_color"),
             "secondary_colors": ", ".join(color_family[1:]) if isinstance(color_family, list) else "",
-            "color_family": str(product.get("color_tone", "")).strip().lower() or None,
-            "high_contrast_festive": str(product.get("color_tone", "")).strip().lower() == "high_contrast_festive",
+            "color_family": str(product.get("color_family", "")).strip().lower() or None,
+            "pattern": product.get("pattern"),
+            "style_category": product.get("style_category"),
+            "silhouette": product.get("silhouette"),
+            "silhouettes": [silhouette] if silhouette else [],
+            "fit_type": product.get("fit_type"),
+            "length": product.get("length"),
+            "sleeve_type": product.get("sleeve_type"),
+            "neckline": product.get("neckline"),
             "fabric_category": product.get("fabric_category"),
+            "fabric_weight": product.get("fabric_weight"),
+            "breathability": product.get("breathability"),
+            "stretch": product.get("stretch"),
+            "texture": product.get("texture"),
+            "care_difficulty": product.get("care_difficulty"),
+            "comfort_level": product.get("comfort_level"),
+            "weather_suitability": product.get("weather_suitability"),
+            "season": product.get("season"),
             "occasion_primary": occasion_tags[0] if occasion_tags else None,
-            "occasion_tags": occasion_tags[1:],
-            "style": style_tags[0] if style_tags else None,
-            "silhouettes": [],
-
+            "occasion_tags": occasion_tags,
+            "occasion_intensity": product.get("occasion_intensity"),
+            "dress_code": product.get("dress_code"),
+            "indoor_outdoor": product.get("indoor_outdoor"),
+            "trend_level": product.get("trend_level"),
+            "statement_level": product.get("statement_level"),
+            "minimal_maximal": product.get("minimal_maximal"),
             "body_type_fit": body_type_fit,
             "skin_tone_match": skin_tone_match,
             "age_tags": age_group_fit,
+            "height_band_fit": product.get("height_band_fit", []),
+            "petite_friendly": product.get("petite_friendly", False),
+            "plus_size_friendly": product.get("plus_size_friendly", False),
+            "alteration_available": product.get("alteration_available", False),
+            "wedding_suitability": product.get("wedding_suitability", False),
+            "wedding_function": product.get("wedding_function"),
+            "travel_friendly": product.get("travel_friendly", False),
+            "layer_friendly": product.get("layer_friendly", False),
+            "premium_flag": product.get("premium_flag", False),
+            "bestseller_flag": product.get("bestseller_flag", False),
+            "trending_flag": product.get("trending_flag", False),
+            "limited_edition": product.get("limited_edition", False),
+            "sale_item": product.get("sale_item", False),
+            "rating": product.get("rating"),
+            "image_url": product.get("image_url"),
+            "back_image_url": product.get("back_image_url"),
+            "embedding_text_dense": dense_text,
+            "embedding_text_sparse": sparse_text,
 
             "trend_score": product.get("trend_score"),
             "bestseller_score": product.get("bestseller_score"),
@@ -160,68 +228,87 @@ def delete_product(item_code: str):
 
 
 def load_merged_dataset():
-    """Pull live product data from ERPNext instead of the static Excel file."""
-    products = fetch_products_from_erp()
- 
+    """Load the product catalog from the configured source (Excel by default for this demo)."""
+    products = fetch_products_from_excel() if DATA_SOURCE == "excel" else fetch_products_from_erp()
+
     rows = []
     for p in products:
         sizes_str = ", ".join(p.get("available_sizes", []))
         occasion_str = ", ".join(p.get("occasion_tags", []))
-        style_str = ", ".join(p.get("style", []))
         body_fit_str = ", ".join(p.get("body_type_fit", []))
         skin_str = ", ".join(p.get("skin_tone_match", []))
         age_str = ", ".join(p.get("age_tags", []))
- 
-        # build the text blob used for embeddings (dense + sparse search)
-        embedding_text = " ".join(filter(None, [
-            p.get("name"),
-            p.get("item_group"),
-            p.get("brand"),
-            p.get("gender"),
-            occasion_str,
-            style_str,
-            p.get("fabric_category"),
-            p.get("specific_color"),
-            p.get("color_tone"),
-            body_fit_str,
-            skin_str,
-            age_str,
-        ]))
- 
+        height_str = ", ".join(p.get("height_band_fit", []))
+
         rows.append({
             "SKU ID": p.get("sku_id"),
+            "SKU Codes": ", ".join(p.get("sku_codes", [])),
             "Product Name": p.get("name"),
             "Category": p.get("item_group"),
+            "Sub Category": p.get("sub_category"),
+            "Collection Name": p.get("collection_name"),
             "Gender": p.get("gender"),
             "Brand": p.get("brand"),
+            "Budget Tier": p.get("budget_tier"),
             "Discounted Price (INR)": p.get("price", 0),
             "Available Sizes": sizes_str,
             "In Stock": "YES" if p.get("stock_count", 0) > 0 else "NO",
-            "Is Active": "YES",  # ERPNext already filters disabled=0 in erp_fetch
+            "Is Active": "YES",
             "Is New Arrival": "YES" if p.get("is_new_arrival") else "NO",
             "Stock Count": p.get("stock_count", 0),
- 
             "Primary Color": p.get("specific_color"),
-            "Secondary Colors": ", ".join(p.get("color_family", [])[1:]),  # skip primary
-            "Color Tone": p.get("color_tone"),
+            "Secondary Colors": ", ".join(p.get("color_family", [])[1:]) if isinstance(p.get("color_family"), list) else "",
+            "Color Family": p.get("color_family"),
+            "Pattern": p.get("pattern"),
+            "Style Category": p.get("style_category"),
+            "Silhouette": p.get("silhouette"),
+            "Fit Type": p.get("fit_type"),
+            "Length": p.get("length"),
+            "Sleeve Type": p.get("sleeve_type"),
+            "Neckline": p.get("neckline"),
             "Fabric": p.get("fabric_category"),
+            "Fabric Weight": p.get("fabric_weight"),
+            "Breathability": p.get("breathability"),
+            "Stretch": p.get("stretch"),
+            "Texture": p.get("texture"),
+            "Care Difficulty": p.get("care_difficulty"),
+            "Comfort Level": p.get("comfort_level"),
+            "Weather Suitability": p.get("weather_suitability"),
+            "Season": p.get("season"),
             "Occasion Tags": occasion_str,
-            "Style Tags": style_str,
- 
+            "Occasion Intensity": p.get("occasion_intensity"),
+            "Dress Code": p.get("dress_code"),
+            "Indoor/Outdoor": p.get("indoor_outdoor"),
+            "Trend Level": p.get("trend_level"),
+            "Statement Level": p.get("statement_level"),
+            "Minimal/Maximal": p.get("minimal_maximal"),
             "Body Type Fit": body_fit_str,
-            "Skin Tone Match": skin_str,
+            "Skin Tone Suitability": skin_str,
             "Age Group Fit": age_str,
- 
+            "Height Band Fit": height_str,
+            "Petite Friendly": "YES" if p.get("petite_friendly") else "NO",
+            "Plus Size Friendly": "YES" if p.get("plus_size_friendly") else "NO",
+            "Alteration Available": "YES" if p.get("alteration_available") else "NO",
+            "Wedding Suitability": "YES" if p.get("wedding_suitability") else "NO",
+            "Wedding Function": p.get("wedding_function"),
+            "Travel Friendly": "YES" if p.get("travel_friendly") else "NO",
+            "Layer Friendly": "YES" if p.get("layer_friendly") else "NO",
+            "Premium Flag": "YES" if p.get("premium_flag") else "NO",
+            "Bestseller Flag": "YES" if p.get("bestseller_flag") else "NO",
+            "Trending Flag": "YES" if p.get("trending_flag") else "NO",
+            "Limited Edition": "YES" if p.get("limited_edition") else "NO",
+            "Sale Item": "YES" if p.get("sale_item") else "NO",
+            "Rating": p.get("rating"),
             "Trend Score (0-1)": p.get("trend_score", 0.5),
             "Bestseller Score (0-1)": p.get("bestseller_score", 0.5),
             "Margin Score (0-1)": p.get("margin_score", 0.5),
             "Inventory Urgency (0-1)": p.get("inventory_urgency", 0.0),
- 
-            "SKU Text for Embedding (feed this to BGE-large-en-v1.5)": embedding_text,
+            "Embedding Text Dense": _dense_text(p),
+            "Embedding Text Sparse": _sparse_text(p),
         })
- 
+
     return pd.DataFrame(rows)
- 
+
 
 
 def build_index(force: bool = False):
@@ -236,10 +323,11 @@ def build_index(force: bool = False):
         print("[build_index] vector DB collection missing. Rebuilding index.")
 
     df = load_merged_dataset()
-    texts = df["SKU Text for Embedding (feed this to BGE-large-en-v1.5)"].fillna("").tolist()
+    dense_texts = df["Embedding Text Dense"].fillna("").astype(str).tolist()
+    sparse_texts = df["Embedding Text Sparse"].fillna("").astype(str).tolist()
 
-    dense_vectors = dense_model.encode(texts, normalize_embeddings=True)
-    sparse_vectors = list(sparse_model.embed(texts))
+    dense_vectors = dense_model.encode(dense_texts, normalize_embeddings=True)
+    sparse_vectors = list(sparse_model.embed(sparse_texts))
 
     if client.collection_exists(COLLECTION):
         client.delete_collection(COLLECTION)
@@ -270,12 +358,15 @@ def build_index(force: bool = False):
                     ),
                 },
                 payload={
-                    # ---- sheet1: core / filter fields ----
                     "sku_id": row["SKU ID"],
+                    "sku_codes": [s.strip() for s in str(row.get("SKU Codes", "")).split(",") if s.strip()],
                     "product_name": row["Product Name"],
                     "category": str(row["Category"]).strip().lower(),
+                    "sub_category": row.get("Sub Category"),
+                    "collection_name": row.get("Collection Name"),
                     "gender": str(row["Gender"]).strip().lower(),
                     "brand": row["Brand"],
+                    "budget_tier": row.get("Budget Tier"),
                     "price": float(row["Discounted Price (INR)"]),
                     "sizes": sizes,
                     "in_stock": row["In Stock"] == "YES",
@@ -283,23 +374,56 @@ def build_index(force: bool = False):
                     "is_new_arrival": row["Is New Arrival"] == "YES",
                     "stock_count": row["Stock Count"],
 
-                    # ---- sheet2: content tags -> renamed/added for rule_engine ----
                     "specific_color": row.get("Primary Color"),
                     "secondary_colors": row.get("Secondary Colors"),
-                    "color_family": str(row.get("Color Tone", "")).strip().lower() or None,
-                    "high_contrast_festive": str(row.get("Color Tone", "")).strip().lower() == "high_contrast_festive",
+                    "color_family": str(row.get("Color Family", "")).strip().lower() or None,
+                    "pattern": row.get("Pattern"),
+                    "style_category": row.get("Style Category"),
+                    "silhouette": row.get("Silhouette"),
+                    "silhouettes": [str(row.get("Silhouette", "")).strip()] if row.get("Silhouette") else [],
+                    "fit_type": row.get("Fit Type"),
+                    "length": row.get("Length"),
+                    "sleeve_type": row.get("Sleeve Type"),
+                    "neckline": row.get("Neckline"),
                     "fabric_category": row.get("Fabric"),
+                    "fabric_weight": row.get("Fabric Weight"),
+                    "breathability": row.get("Breathability"),
+                    "stretch": row.get("Stretch"),
+                    "texture": row.get("Texture"),
+                    "care_difficulty": row.get("Care Difficulty"),
+                    "comfort_level": row.get("Comfort Level"),
+                    "weather_suitability": row.get("Weather Suitability"),
+                    "season": row.get("Season"),
                     "occasion_primary": occasion_tags[0] if occasion_tags else None,
-                    "occasion_tags": occasion_tags[1:],   # secondary tags only
-                    "style": style_tags[0] if style_tags else None,
-                    "silhouettes": [],   # fill in if you add a silhouette column later
-
-                    # ---- sheet3: physical fit ----
+                    "occasion_tags": occasion_tags,
+                    "occasion_intensity": row.get("Occasion Intensity"),
+                    "dress_code": row.get("Dress Code"),
+                    "indoor_outdoor": row.get("Indoor/Outdoor"),
+                    "trend_level": row.get("Trend Level"),
+                    "statement_level": row.get("Statement Level"),
+                    "minimal_maximal": row.get("Minimal/Maximal"),
                     "body_type_fit": body_type_fit,
                     "skin_tone_match": skin_tone_match,
+                    "skin_tone_suitability": skin_tone_match,
                     "age_tags": age_group_fit,
-
-                    # ---- sheet4: business signals ----
+                    "height_band_fit": [t.strip() for t in str(row.get("Height Band Fit", "")).split(",") if t.strip()],
+                    "petite_friendly": str(row.get("Petite Friendly", "NO")).strip().upper() == "YES",
+                    "plus_size_friendly": str(row.get("Plus Size Friendly", "NO")).strip().upper() == "YES",
+                    "alteration_available": str(row.get("Alteration Available", "NO")).strip().upper() == "YES",
+                    "wedding_suitability": str(row.get("Wedding Suitability", "NO")).strip().upper() == "YES",
+                    "wedding_function": row.get("Wedding Function"),
+                    "travel_friendly": str(row.get("Travel Friendly", "NO")).strip().upper() == "YES",
+                    "layer_friendly": str(row.get("Layer Friendly", "NO")).strip().upper() == "YES",
+                    "premium_flag": str(row.get("Premium Flag", "NO")).strip().upper() == "YES",
+                    "bestseller_flag": str(row.get("Bestseller Flag", "NO")).strip().upper() == "YES",
+                    "trending_flag": str(row.get("Trending Flag", "NO")).strip().upper() == "YES",
+                    "limited_edition": str(row.get("Limited Edition", "NO")).strip().upper() == "YES",
+                    "sale_item": str(row.get("Sale Item", "NO")).strip().upper() == "YES",
+                    "rating": row.get("Rating"),
+                    "image_url": row.get("Image URL"),
+                    "back_image_url": row.get("Back Image URL"),
+                    "embedding_text_dense": row.get("Embedding Text Dense", ""),
+                    "embedding_text_sparse": row.get("Embedding Text Sparse", ""),
                     "trend_score": row.get("Trend Score (0-1)"),
                     "bestseller_score": row.get("Bestseller Score (0-1)"),
                     "margin_score": row.get("Margin Score (0-1)"),

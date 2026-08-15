@@ -2,6 +2,14 @@ import re
 
 from nlp.taxonomy import BUDGET_SOFT_BUFFER
 
+BUDGET_LABEL_MAP = {
+    "Under Rs.1,500": {"min": 0, "max": 1500},
+    "Rs.1,500-3,000": {"min": 1500, "max": 3000},
+    "Rs.3,000-6,000": {"min": 3000, "max": 6000},
+    "Rs.6,000-12,000": {"min": 6000, "max": 12000},
+    "Rs.12,000+": {"min": 12000, "max": None},
+}
+
 
 def normalize_budget(user_budget):
     if not user_budget:
@@ -26,6 +34,9 @@ def normalize_budget(user_budget):
         value = user_budget.strip()
         if not value:
             return None
+
+        if value in BUDGET_LABEL_MAP:
+            return BUDGET_LABEL_MAP[value]
 
         ranges = re.findall(r"(\d{2,6})", value)
         if len(ranges) >= 2:

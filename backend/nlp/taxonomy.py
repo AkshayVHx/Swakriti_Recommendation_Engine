@@ -14,16 +14,13 @@ FABRIC_TAGS = [
     "crisp_volumetric", "sensory_hypoallergenic", "rich_festive",
 ]
 
-BODY_TYPE_TAGS = [
-    "hourglass", "pear_triangle", "inverted_triangle",
-    "rectangle_athletic", "round_apple", "universal",
-]
+BODY_TYPE_TAGS = ["hourglass", "pear", "apple", "rectangle", "universal"]
 
-HEIGHT_TAGS = ["micro_mini", "knee_length", "midi", "tea_length", "maxi", "high_low"]
+HEIGHT_TAGS = ["petite", "regular", "tall"]
 
 SKIN_TONE_TAGS = ["fair", "light", "medium", "tan", "deep"]
 
-AGE_TAGS = ["gen_z", "millennials", "gen_x", "quinquagenarian", "universal_ageless"]
+AGE_TAGS = ["18-25", "26-35", "36-50", "all"]
 
 COMFORT_LEVELS = ["high", "medium", "festive", "none"]
 
@@ -52,37 +49,19 @@ STYLE_ADJACENCY = {
 
 COLOR_FAMILIES = {
     "warm": {
-        "crimson", "scarlet", "vermillion", "ruby", "cherry", "garnet", "maroon",
-        "venetian red", "cardinal", "brick", "tangerine", "coral", "burnt orange",
-        "peach", "apricot", "pumpkin", "carrot", "ochre", "terracotta", "persimmon",
-        "gold", "mustard", "lemon", "amber", "saffron", "canary", "cornsilk",
-        "goldenrod", "cream", "dandelion", "terra cotta", "sienna", "mahogany", "russet",
+        "coral pink", "mustard yellow", "rust orange", "beige", "wine red", "maroon",
+        "blush pink", "sage green", "lavender", "charcoal grey", "navy blue", "sky blue",
+        "white", "black", "emerald green", "olive green", "golden yellow", "peach",
+        "terracotta", "amber", "copper", "apricot", "sunset orange", "sand"
     },
     "cool": {
-        "navy", "azure", "sapphire", "sky blue", "cobalt", "cerulean", "prussian blue",
-        "midnight", "teal", "turquoise", "emerald", "forest green", "sage", "olive",
-        "seafoam", "moss", "kelly", "bottle green", "chartreuse", "indigo", "plum",
-        "violet", "amethyst", "mulberry", "eggplant", "royal purple", "grape", "orchid",
+        "navy blue", "sky blue", "charcoal grey", "sage green", "emerald green",
+        "lavender", "black", "white", "blue", "slate blue", "ice blue", "teal",
+        "purple", "grape", "indigo", "mint green"
     },
     "neutral": {
-        "white", "black", "charcoal", "slate", "silver", "platinum", "off-white",
-        "pearl", "ash", "pewter", "steel", "gunmetal", "beige", "taupe", "ivory",
-        "tan", "khaki", "greige", "sand", "ecru", "camel", "cocoa", "sepia",
-        "chocolate", "walnut",
-    },
-    "muted_pastel": {
-        "blush", "baby pink", "rose quartz", "salmon", "candy floss", "petal",
-        "cherry blossom", "baby blue", "periwinkle", "powder blue", "cornflower",
-        "sky", "ice blue", "butter", "pale peach", "creamy yellow", "lemon chiffon",
-        "mint", "pistachio", "celadon", "honeydew", "lavender", "lilac", "mauve",
-        "wisteria", "thistle",
-    },
-    "neon": {
-        "electric pink", "hot pink", "magenta", "shocking pink", "fluorescent magenta",
-        "electric yellow", "highlighter yellow", "acid green", "lime green",
-        "radioactive green", "laser lemon", "limeade", "safety yellow", "lightning",
-        "electric blue", "cyan", "laser blue", "electric cyan", "vivid cerulean",
-        "atomic orange", "blaze orange", "electric violet", "cyber purple",
+        "beige", "white", "black", "charcoal grey", "cream", "ivory", "taupe",
+        "greige", "stone", "silver grey", "ash grey", "soft grey", "brown"
     },
 }
 

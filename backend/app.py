@@ -24,6 +24,7 @@ from search.query_builder import (
     state_to_query,
     build_clean_query_with_gemini,
 )
+from scoring.budget import BUDGET_LABEL_MAP, normalize_budget
 from voice.live_token import create_live_token
 
 
@@ -135,21 +136,6 @@ def parse_answer(body: ParseAnswerRequest):
         "low_confidence": low_confidence,
         "product_category": product_category,
     }
-
-BUDGET_LABEL_MAP = {
-    "Under 1000":   {"min": 0,     "max": 1000},
-    "1000-2500":    {"min": 1000,  "max": 2500},
-    "2500-5000":    {"min": 2500,  "max": 5000},
-    "5000-10000":   {"min": 5000,  "max": 10000},
-    "10000+":       {"min": 10000, "max": None},
-}
-
-def normalize_budget(budget):
-    if isinstance(budget, dict):
-        return budget
-    if isinstance(budget, str):
-        return BUDGET_LABEL_MAP.get(budget)
-    return None
 
 @app.post("/recommend")
 def recommend_endpoint(body: RecommendRequest):

@@ -8,6 +8,13 @@ from nlp.taxonomy import (
     SKIN_TONE_TAGS, AGE_TAGS, COMFORT_LEVELS,
 )
 
+# Keep the extraction surface aligned to the current beta catalog.
+# This avoids accepting unsupported values like "Traditional", "Under 18",
+# or "Inverted Triangle" that would otherwise produce empty downstream matches.
+BODY_TYPE_TAGS = ["hourglass", "pear", "apple", "rectangle", "universal"]
+STYLE_TAGS = ["minimalist", "maximalist", "classic", "modern", "fusion", "western", "indian", "south_indian"]
+AGE_TAGS = ["18-25", "26-35", "36-50", "all"]
+
 client = genai.Client(
     api_key=os.environ.get("GEMINI_API_KEY")
 )
