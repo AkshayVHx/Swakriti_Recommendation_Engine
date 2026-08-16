@@ -129,9 +129,8 @@ def update_single_product(item_code: str):
     sparse_text = _sparse_text(product)
 
     with _model_lock:
-       dense_vec = list(dense_model.embed([dense_text]))[0].tolist()
+        dense_vec = list(dense_model.embed([dense_text]))[0].tolist()
         sparse_vec = list(sparse_model.embed([sparse_text]))[0]
-
     point = PointStruct(
         id=sku_to_point_id(product["sku_id"]),
         vector={
@@ -633,4 +632,4 @@ if __name__ == "__main__":
 
     print("\n--- FINAL TOP 5 (Gemini tags + full rule engine) ---")
     for r in results:
-        print(f"{r['rank_label']}: {r['sku_id']}  final_score={r['final_score']}")
+        print(f"{r['rank_label']}: {r['sku_id']}  final_score={r['final_score']}") 
