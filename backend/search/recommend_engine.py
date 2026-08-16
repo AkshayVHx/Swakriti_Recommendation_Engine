@@ -1,4 +1,5 @@
 import hashlib
+import re
 import pandas as pd
 import os
 import threading
@@ -106,6 +107,17 @@ def _dense_text(product: dict) -> str:
 
 def _sparse_text(product: dict) -> str:
     return product.get("embedding_text_sparse") or _fallback_sparse_text(product)
+
+
+def _to_direct_image_url(url: str) -> str:
+    """Convert a Google Drive 'view' link into a directly-loadable image URL."""
+    if not url:
+        return ""
+    match = re.search(r"/d/([a-zA-Z0-9_-]+)", url)
+    if match:
+        file_id = match.group(1)
+        return f"https://lh3.googleusercontent.com/d/{file_id}"
+    return url
 
 
 def update_single_product(item_code: str):
@@ -628,7 +640,7 @@ def recommend(raw_query: str, gender: str = None, size: str = None, top_k: int =
             "Fabric": product.get("fabric_category") or "",
             "Occasion": product.get("occasion_primary") or "",
             "Rating": product.get("rating") or 0,
-            "Image URL": product.get("image_url") or "",
+            "Image URL": _to_direct_image_url(product.get("image_url")),
             "Product Description": product.get("embedding_text_dense") or "",
             "Wedding Suitability": "YES" if product.get("wedding_suitability") else "NO",
             "Fashion Keywords": product.get("embedding_text_sparse") or "",
@@ -648,4 +660,4 @@ if __name__ == "__main__":
 
     print("\n--- FINAL TOP 5 (Gemini tags + full rule engine) ---")
     for r in results:
-        print(f"{r['rank_label']}: {r['sku_id']}  final_score={r['final_score']}") 
+        print(f"{r['rank_label']}: {r['sku_id']}  final_score={r['final_score']}")
