@@ -66,7 +66,7 @@ def ensure_index():
     global index_ready
     if not index_ready:
         print("[ensure_index] loading vector index...")
-        build_index(force=True)
+        build_index()
         status = get_vector_db_status()
         print(
             f"[ensure_index] vector DB ready: collection='{status['collection']}' exists={status['exists']} count={status['count']}"
