@@ -2,7 +2,8 @@ import hashlib
 import pandas as pd
 import os
 import threading
-from sentence_transformers import SentenceTransformer
+
+from fastembed import TextEmbedding
 from fastembed import SparseTextEmbedding
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -23,7 +24,7 @@ DATA_SOURCE = os.environ.get("DATA_SOURCE", "excel")
 
 COLLECTION = "skus"
 
-dense_model = SentenceTransformer("BAAI/bge-small-en-v1.5")
+dense_model = TextEmbedding("BAAI/bge-small-en-v1.5")
 sparse_model = SparseTextEmbedding("Qdrant/bm25")
 
 client = QdrantClient(
@@ -128,7 +129,7 @@ def update_single_product(item_code: str):
     sparse_text = _sparse_text(product)
 
     with _model_lock:
-        dense_vec = dense_model.encode(dense_text, normalize_embeddings=True).tolist()
+       dense_vec = list(dense_model.embed([dense_text]))[0].tolist()
         sparse_vec = list(sparse_model.embed([sparse_text]))[0]
 
     point = PointStruct(
@@ -326,7 +327,7 @@ def build_index(force: bool = False):
     dense_texts = df["Embedding Text Dense"].fillna("").astype(str).tolist()
     sparse_texts = df["Embedding Text Sparse"].fillna("").astype(str).tolist()
 
-    dense_vectors = dense_model.encode(dense_texts, normalize_embeddings=True)
+ dense_vectors = list(dense_model.embed(dense_texts))
     sparse_vectors = list(sparse_model.embed(sparse_texts))
 
     if client.collection_exists(COLLECTION):
@@ -334,7 +335,7 @@ def build_index(force: bool = False):
 
     client.create_collection(
         collection_name=COLLECTION,
-        vectors_config={"dense": VectorParams(size=dense_vectors.shape[1], distance=Distance.COSINE)},
+       vectors_config={"dense": VectorParams(size=len(dense_vectors[0]), distance=Distance.COSINE)},
         sparse_vectors_config={"sparse": SparseVectorParams()},
     )
 
@@ -512,7 +513,7 @@ def search(query_text: str, gender: str = None, size: str = None,
     semantic_query = semantic_query or query_text
 
     with _model_lock:   # ← NEW: serialize access to the shared tokenizer/model
-        query_dense = dense_model.encode(semantic_query, normalize_embeddings=True).tolist()
+        query_dense = list(dense_model.embed([semantic_query]))[0].tolist()
         query_sparse = list(sparse_model.embed([query_text]))[0]
 
     must = [
