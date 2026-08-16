@@ -23,7 +23,7 @@ DATA_SOURCE = os.environ.get("DATA_SOURCE", "excel")
 
 COLLECTION = "skus"
 
-dense_model = SentenceTransformer("BAAI/bge-large-en-v1.5")
+dense_model = SentenceTransformer("BAAI/bge-small-en-v1.5")
 sparse_model = SparseTextEmbedding("Qdrant/bm25")
 
 client = QdrantClient(
