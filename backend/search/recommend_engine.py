@@ -353,6 +353,17 @@ def build_index(force: bool = False):
         sparse_vectors_config={"sparse": SparseVectorParams()},
     )
 
+    client.create_payload_index(
+        collection_name=COLLECTION,
+        field_name="in_stock",
+        field_schema="bool",
+    )
+    client.create_payload_index(
+        collection_name=COLLECTION,
+        field_name="is_active",
+        field_schema="bool",
+    )
+
     points = []
     for i, row in df.iterrows():
         sizes = [s.strip().upper() for s in str(row["Available Sizes"]).split(",")]
