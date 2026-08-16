@@ -618,6 +618,21 @@ def recommend(raw_query: str, gender: str = None, size: str = None, top_k: int =
         item["occasion_tags"] = product.get("occasion_tags")
         item["style"] = product.get("style")
         item["is_new_arrival"] = product.get("is_new_arrival")
+        item["metadata"] = {
+            "Product Name": product.get("product_name") or item.get("sku_id"),
+            "Brand": product.get("brand") or "",
+            "Category": product.get("category") or "",
+            "Sub Category": product.get("sub_category") or "",
+            "Price": product.get("price") or 0,
+            "Primary Colour": product.get("specific_color") or "",
+            "Fabric": product.get("fabric_category") or "",
+            "Occasion": product.get("occasion_primary") or "",
+            "Rating": product.get("rating") or 0,
+            "Image URL": product.get("image_url") or "",
+            "Product Description": product.get("embedding_text_dense") or "",
+            "Wedding Suitability": "YES" if product.get("wedding_suitability") else "NO",
+            "Fashion Keywords": product.get("embedding_text_sparse") or "",
+        }
 
     return ranked, tags
 
