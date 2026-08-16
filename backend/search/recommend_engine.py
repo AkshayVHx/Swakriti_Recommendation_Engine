@@ -316,6 +316,8 @@ def load_merged_dataset():
             "Bestseller Score (0-1)": p.get("bestseller_score", 0.5),
             "Margin Score (0-1)": p.get("margin_score", 0.5),
             "Inventory Urgency (0-1)": p.get("inventory_urgency", 0.0),
+            "Image URL": p.get("image_url"),
+            "Back Image URL": p.get("back_image_url"),
             "Embedding Text Dense": _dense_text(p),
             "Embedding Text Sparse": _sparse_text(p),
         })
