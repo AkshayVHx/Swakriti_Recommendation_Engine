@@ -131,6 +131,7 @@ def update_single_product(item_code: str):
     with _model_lock:
         dense_vec = list(dense_model.embed([dense_text]))[0].tolist()
         sparse_vec = list(sparse_model.embed([sparse_text]))[0]
+
     point = PointStruct(
         id=sku_to_point_id(product["sku_id"]),
         vector={
@@ -326,7 +327,7 @@ def build_index(force: bool = False):
     dense_texts = df["Embedding Text Dense"].fillna("").astype(str).tolist()
     sparse_texts = df["Embedding Text Sparse"].fillna("").astype(str).tolist()
 
- dense_vectors = list(dense_model.embed(dense_texts))
+    dense_vectors = list(dense_model.embed(dense_texts))
     sparse_vectors = list(sparse_model.embed(sparse_texts))
 
     if client.collection_exists(COLLECTION):
@@ -334,7 +335,7 @@ def build_index(force: bool = False):
 
     client.create_collection(
         collection_name=COLLECTION,
-       vectors_config={"dense": VectorParams(size=len(dense_vectors[0]), distance=Distance.COSINE)},
+        vectors_config={"dense": VectorParams(size=len(dense_vectors[0]), distance=Distance.COSINE)},
         sparse_vectors_config={"sparse": SparseVectorParams()},
     )
 
@@ -445,7 +446,7 @@ def build_search_query(raw_query: str, tags: dict) -> str:
     """Build QUERY_2: Clean keyword search query for BM25 (removes duplication + noise)."""
     parts = []
     seen = set()
-    
+
     def add_tag(tag_name, value):
         """Helper to add tags without duplication."""
         if not value:
@@ -454,24 +455,24 @@ def build_search_query(raw_query: str, tags: dict) -> str:
             values = [str(v).strip().lower() for v in value if str(v).strip()]
         else:
             values = [str(value).strip().lower()]
-        
+
         for item in values:
             if item and item not in seen:
                 seen.add(item)
                 parts.append(item)
-    
+
     # Priority order for tags (most specific first)
     add_tag("occasion", tags.get("occasion"))
     add_tag("event_context", tags.get("event_context"))
     add_tag("category", tags.get("category"))
     add_tag("style", tags.get("style"))
-    
-    
+
+
     color_value = tags.get("color")
     if not color_value and tags.get("formality") in COLOR_FAMILIES:
         color_value = tags.get("formality")
     if color_value:
-    
+
         color_list = color_value if isinstance(color_value, list) else [color_value]
         for c in color_list:
             c_lower = str(c).strip().lower()
@@ -479,7 +480,7 @@ def build_search_query(raw_query: str, tags: dict) -> str:
                 add_tag("color_family", sorted(COLOR_FAMILIES[c_lower]))  # expand to all specific colors
             else:
                 add_tag("color", c)                  # it's already a specific color
-    
+
     add_tag("fabric_comfort", tags.get("fabric_comfort"))
     add_tag("body_type", tags.get("body_type"))
     add_tag("skin_tone", tags.get("skin_tone"))
@@ -487,7 +488,7 @@ def build_search_query(raw_query: str, tags: dict) -> str:
     add_tag("formality", tags.get("formality"))
     add_tag("height_cm_or_label", tags.get("height_cm_or_label"))
     add_tag("age_group", tags.get("age_group"))
-    
+
     # Budget as keywords (no duplication)
     budget = tags.get("budget")
     if budget and isinstance(budget, dict):
@@ -497,7 +498,7 @@ def build_search_query(raw_query: str, tags: dict) -> str:
             add_tag("budget_max", f"under {max_b}")
         elif min_b is not None:
             add_tag("budget_min", f"from {min_b}")
-    
+
     # Join and return
     return " ".join(parts).strip()
 
@@ -522,7 +523,7 @@ def search(query_text: str, gender: str = None, size: str = None,
     if gender:
         must.append(FieldCondition(key="gender", match=MatchValue(value=gender)))
 
-    if category:                                                   
+    if category:
         must.append(FieldCondition(key="category", match=MatchValue(value=category.strip().lower())))
 
     if size:
@@ -579,7 +580,7 @@ def recommend(raw_query: str, gender: str = None, size: str = None, top_k: int =
     print(f"[QUERY_3] VECTOR SEARCH QUERY (BGE dense semantic embedding):")
     print(f"  {raw_query!r}")
     print(f"{'='*80}")
-    
+
     candidates = search(
         query_text=search_text,
         gender=gender,
